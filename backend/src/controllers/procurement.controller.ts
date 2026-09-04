@@ -1,4 +1,4 @@
-import { Request, Response } from 'express';
+import { Context } from 'hono';
 import { ProcurementService, ProcurementPayload } from '../services/procurement.service';
 
 export class ProcurementController {
@@ -6,21 +6,21 @@ export class ProcurementController {
    * Endpoint: POST /api/procurement/purchase
    * Compatibility endpoint for dashboard client PO.
    */
-  public static async registerPurchase(req: Request, res: Response) {
-    if (!req.user) {
-      return res.status(401).json({ success: false, message: 'Unauthorized session.' });
+  public static async registerPurchase(c: Context) {
+    const user = c.get('user');
+    if (!user) {
+      return c.json({ success: false, message: 'Unauthorized session.' }, 401);
     }
 
-    const user = req.user as any;
     const spreadsheetId = user.spreadsheetId;
-
     if (!spreadsheetId) {
-      return res.status(400).json({ 
+      return c.json({ 
         success: false, 
         message: 'No Google Sheet database linked. Please reinitialize your database.' 
-      });
+      }, 400);
     }
 
+    const body = await c.req.json().catch(() => ({}));
     const {
       supplierId,
       materialId,
@@ -42,13 +42,13 @@ export class ProcurementController {
       laborHeadcount,
       laborHoursWorked,
       laborCost,
-    } = req.body;
+    } = body;
 
     if (!supplierId || !materialId || !invoiceNumber || !quantity || !unitRate || !purchaseDate) {
-      return res.status(400).json({ 
+      return c.json({ 
         success: false, 
         message: 'Missing critical procurement fields (Supplier, Material, Invoice, Quantity, Rate, Date).' 
-      });
+      }, 400);
     }
 
     try {
@@ -81,18 +81,18 @@ export class ProcurementController {
         payload
       );
 
-      return res.json({
+      return c.json({
         success: true,
         message: 'Procurement purchase transaction recorded successfully!',
         data: result,
       });
     } catch (error: any) {
       console.error('[ProcurementController] Atomic purchase registration failed:', error);
-      return res.status(500).json({ 
+      return c.json({ 
         success: false, 
         message: 'Failed to record procurement transaction.', 
         error: error.message 
-      });
+      }, 500);
     }
   }
 
@@ -101,21 +101,21 @@ export class ProcurementController {
    * Registers a purchase PO nested transaction, supporting optional damage logging.
    * Returns 201 Created on success.
    */
-  public static async registerPurchaseOrder(req: Request, res: Response) {
-    if (!req.user) {
-      return res.status(401).json({ success: false, message: 'Unauthorized session.' });
+  public static async registerPurchaseOrder(c: Context) {
+    const user = c.get('user');
+    if (!user) {
+      return c.json({ success: false, message: 'Unauthorized session.' }, 401);
     }
 
-    const user = req.user as any;
     const spreadsheetId = user.spreadsheetId;
-
     if (!spreadsheetId) {
-      return res.status(400).json({ 
+      return c.json({ 
         success: false, 
         message: 'No Google Sheet database linked. Please reinitialize your database.' 
-      });
+      }, 400);
     }
 
+    const body = await c.req.json().catch(() => ({}));
     const {
       supplier_id,
       material_id,
@@ -131,13 +131,13 @@ export class ProcurementController {
       transport,
       labor,
       damage_quantity,
-    } = req.body;
+    } = body;
 
     if (!supplier_id || !material_id || !invoice_number || !quantity || !unit_rate) {
-      return res.status(400).json({ 
+      return c.json({ 
         success: false, 
         message: 'Missing critical PO fields (supplier_id, material_id, invoice_number, quantity, unit_rate).' 
-      });
+      }, 400);
     }
 
     try {
@@ -175,7 +175,7 @@ export class ProcurementController {
         payload
       );
 
-      return res.status(201).json({
+      return c.json({
         success: true,
         message: 'Procurement transaction recorded successfully under Phase 4!',
         data: {
@@ -187,14 +187,14 @@ export class ProcurementController {
             (payload.truckCost + payload.fuelCost + payload.tollsAllowance) + 
             payload.laborCost) / payload.quantity,
         },
-      });
+      }, 201);
     } catch (error: any) {
       console.error('[ProcurementController] Phase 4 PO registration failed:', error);
-      return res.status(500).json({ 
+      return c.json({ 
         success: false, 
         message: 'Failed to write purchases transaction.', 
         error: error.message 
-      });
+      }, 500);
     }
   }
 }

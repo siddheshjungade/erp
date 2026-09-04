@@ -1,4 +1,4 @@
-import { Request, Response } from 'express';
+import { Context } from 'hono';
 import { google } from 'googleapis';
 import { GoogleAuthService } from '../services/googleAuth.service';
 
@@ -7,20 +7,19 @@ export class SupplierController {
    * Endpoint: GET /api/suppliers
    * Parses rows from target workbook Suppliers sheet layout maps.
    */
-  public static async getSuppliers(req: Request, res: Response) {
-    if (!req.user) {
-      return res.status(401).json({ success: false, message: 'Unauthorized session.' });
+  public static async getSuppliers(c: Context) {
+    const user = c.get('user');
+    if (!user) {
+      return c.json({ success: false, message: 'Unauthorized session.' }, 401);
     }
 
-    const user = req.user as any;
     const spreadsheetId = user.spreadsheetId;
-
     if (!spreadsheetId) {
-      return res.status(400).json({ success: false, message: 'No Google Sheet database linked.' });
+      return c.json({ success: false, message: 'No Google Sheet database linked.' }, 400);
     }
 
     try {
-      const authClient = GoogleAuthService.getClientWithTokens(user.tokens);
+      const authClient = GoogleAuthService.getClientWithTokens(user.tokens, c);
       const sheets = google.sheets({ version: 'v4', auth: authClient });
 
       const response = await sheets.spreadsheets.values.get({
@@ -30,7 +29,7 @@ export class SupplierController {
 
       const rows = response.data.values || [];
       if (rows.length <= 1) {
-        return res.json({ success: true, data: [] });
+        return c.json({ success: true, data: [] });
       }
 
       const suppliers = rows.slice(1).map((row) => ({
@@ -45,10 +44,10 @@ export class SupplierController {
         balanceDue: Number(row[8] || 0),
       }));
 
-      return res.json({ success: true, data: suppliers });
+      return c.json({ success: true, data: suppliers });
     } catch (error: any) {
       console.error('[SupplierController] Fetching suppliers failed:', error);
-      return res.status(500).json({ success: false, message: 'Failed to read suppliers directory.', error: error.message });
+      return c.json({ success: false, message: 'Failed to read suppliers directory.', error: error.message }, 500);
     }
   }
 
@@ -56,29 +55,29 @@ export class SupplierController {
    * Endpoint: POST /api/suppliers
    * Appends a new supplier row with relational tracking formulas.
    */
-  public static async createSupplier(req: Request, res: Response) {
-    if (!req.user) {
-      return res.status(401).json({ success: false, message: 'Unauthorized session.' });
+  public static async createSupplier(c: Context) {
+    const user = c.get('user');
+    if (!user) {
+      return c.json({ success: false, message: 'Unauthorized session.' }, 401);
     }
 
-    const user = req.user as any;
     const spreadsheetId = user.spreadsheetId;
-
     if (!spreadsheetId) {
-      return res.status(400).json({ success: false, message: 'No Google Sheet database linked.' });
+      return c.json({ success: false, message: 'No Google Sheet database linked.' }, 400);
     }
 
-    const { company_name, gst_number, contact_person, phone, payment_terms } = req.body;
+    const body = await c.req.json().catch(() => ({}));
+    const { company_name, gst_number, contact_person, phone, payment_terms } = body;
 
     if (!company_name || !gst_number || !contact_person || !phone || !payment_terms) {
-      return res.status(400).json({
+      return c.json({
         success: false,
         message: 'Missing required supplier fields (company_name, gst_number, contact_person, phone, payment_terms).',
-      });
+      }, 400);
     }
 
     try {
-      const authClient = GoogleAuthService.getClientWithTokens(user.tokens);
+      const authClient = GoogleAuthService.getClientWithTokens(user.tokens, c);
       const sheets = google.sheets({ version: 'v4', auth: authClient });
 
       // 1. Fetch current row count of Suppliers
@@ -114,7 +113,7 @@ export class SupplierController {
         requestBody: { values: [supplierRow] },
       });
 
-      return res.status(201).json({
+      return c.json({
         success: true,
         message: 'Supplier created successfully!',
         data: {
@@ -125,10 +124,10 @@ export class SupplierController {
           phone,
           paymentTerms: payment_terms,
         },
-      });
+      }, 201);
     } catch (error: any) {
       console.error('[SupplierController] Creating supplier failed:', error);
-      return res.status(500).json({ success: false, message: 'Failed to write supplier to sheet.', error: error.message });
+      return c.json({ success: false, message: 'Failed to write supplier to sheet.', error: error.message }, 500);
     }
   }
 }

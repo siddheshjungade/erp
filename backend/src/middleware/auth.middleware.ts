@@ -1,6 +1,7 @@
-import { Request, Response, NextFunction } from 'express';
+import { createMiddleware } from 'hono/factory';
+import { getCookie } from 'hono/cookie';
 import jwt from 'jsonwebtoken';
-import config from '../config/env';
+import { getEnv } from '../config/env';
 
 export interface UserPayload {
   googleId: string;
@@ -8,50 +9,51 @@ export interface UserPayload {
   name: string;
   picture: string;
   tokens: any;
+  spreadsheetId?: string;
+  spreadsheetUrl?: string;
+  sheets?: string[];
 }
 
-// Extend Request interface to include user payload
-declare global {
-  namespace Express {
-    interface Request {
-      user?: UserPayload;
-    }
-  }
-}
+export type Env = {
+  Variables: {
+    user: UserPayload;
+  };
+};
 
-export const authMiddleware = (req: Request, res: Response, next: NextFunction) => {
+export const authMiddleware = createMiddleware<Env>(async (c, next) => {
   try {
     let token = '';
 
     // Check header
-    const authHeader = req.headers.authorization;
+    const authHeader = c.req.header('authorization');
     if (authHeader && authHeader.startsWith('Bearer ')) {
       token = authHeader.split(' ')[1];
     }
 
     // Check cookie
-    if (!token && req.cookies && req.cookies.token) {
-      token = req.cookies.token;
+    if (!token) {
+      token = getCookie(c, 'token') || '';
     }
 
     // Check query params (fallback)
-    if (!token && req.query.token && typeof req.query.token === 'string') {
-      token = req.query.token;
+    if (!token) {
+      token = c.req.query('token') || '';
     }
 
     if (!token) {
-      return res.status(401).json({ success: false, message: 'Authorization token required. Access Denied.' });
+      return c.json({ success: false, message: 'Authorization token required. Access Denied.' }, 401);
     }
 
     // Verify token
-    const decoded = jwt.verify(token, config.JWT_SECRET) as UserPayload;
+    const envVars = getEnv(c);
+    const decoded = jwt.verify(token, envVars.JWT_SECRET) as UserPayload;
     
-    // Attach to request
-    req.user = decoded;
+    // Attach to request context
+    c.set('user', decoded);
     
-    next();
+    await next();
   } catch (error: any) {
     console.error('[authMiddleware] Token verification failed:', error.message);
-    return res.status(401).json({ success: false, message: 'Invalid or expired token. Unauthorized.' });
+    return c.json({ success: false, message: 'Invalid or expired token. Unauthorized.' }, 401);
   }
-};
+});

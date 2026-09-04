@@ -1,8 +1,8 @@
-import { Router } from 'express';
+import { Hono } from 'hono';
 import { ProcurementController } from '../controllers/procurement.controller';
-import { authMiddleware } from '../middleware/auth.middleware';
+import { authMiddleware, Env } from '../middleware/auth.middleware';
 
-const router = Router();
+const router = new Hono<Env>();
 
 router.post('/purchase', authMiddleware, ProcurementController.registerPurchase);
 

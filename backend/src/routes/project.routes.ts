@@ -1,8 +1,8 @@
-import { Router } from 'express';
+import { Hono } from 'hono';
 import { ProjectController } from '../controllers/project.controller';
-import { authMiddleware } from '../middleware/auth.middleware';
+import { authMiddleware, Env } from '../middleware/auth.middleware';
 
-const router = Router();
+const router = new Hono<Env>();
 
 router.post('/', authMiddleware, ProjectController.createProject);
 router.get('/', authMiddleware, ProjectController.getProjects);

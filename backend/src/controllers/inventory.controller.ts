@@ -1,4 +1,4 @@
-import { Request, Response } from 'express';
+import { Context } from 'hono';
 import { google } from 'googleapis';
 import { GoogleAuthService } from '../services/googleAuth.service';
 
@@ -7,20 +7,19 @@ export class InventoryController {
    * Endpoint: GET /api/inventory
    * Extracts real-time current warehouse stock parameters.
    */
-  public static async getInventory(req: Request, res: Response) {
-    if (!req.user) {
-      return res.status(401).json({ success: false, message: 'Unauthorized session.' });
+  public static async getInventory(c: Context) {
+    const user = c.get('user');
+    if (!user) {
+      return c.json({ success: false, message: 'Unauthorized session.' }, 401);
     }
 
-    const user = req.user as any;
     const spreadsheetId = user.spreadsheetId;
-
     if (!spreadsheetId) {
-      return res.status(400).json({ success: false, message: 'No Google Sheet database linked.' });
+      return c.json({ success: false, message: 'No Google Sheet database linked.' }, 400);
     }
 
     try {
-      const authClient = GoogleAuthService.getClientWithTokens(user.tokens);
+      const authClient = GoogleAuthService.getClientWithTokens(user.tokens, c);
       const sheets = google.sheets({ version: 'v4', auth: authClient });
 
       // 1. Fetch rows with FORMULA option to check for hardcoded inputs
@@ -68,7 +67,7 @@ export class InventoryController {
 
       const finalRows = response.data.values || [];
       if (finalRows.length <= 1) {
-        return res.json({ success: true, data: [] });
+        return c.json({ success: true, data: [] });
       }
 
       const inventory = finalRows.slice(1).map((row) => ({
@@ -81,10 +80,10 @@ export class InventoryController {
         minStockAlert: Number(row[6] || 0),
       }));
 
-      return res.json({ success: true, data: inventory });
+      return c.json({ success: true, data: inventory });
     } catch (error: any) {
       console.error('[InventoryController] Fetching inventory failed:', error);
-      return res.status(500).json({ success: false, message: 'Failed to read inventory.', error: error.message });
+      return c.json({ success: false, message: 'Failed to read inventory.', error: error.message }, 500);
     }
   }
 
@@ -92,29 +91,29 @@ export class InventoryController {
    * Endpoint: POST /api/inventory
    * Registers a new hardware material in the Inventory catalog.
    */
-  public static async createInventoryItem(req: Request, res: Response) {
-    if (!req.user) {
-      return res.status(401).json({ success: false, message: 'Unauthorized session.' });
+  public static async createInventoryItem(c: Context) {
+    const user = c.get('user');
+    if (!user) {
+      return c.json({ success: false, message: 'Unauthorized session.' }, 401);
     }
 
-    const user = req.user as any;
     const spreadsheetId = user.spreadsheetId;
-
     if (!spreadsheetId) {
-      return res.status(400).json({ success: false, message: 'No Google Sheet database linked.' });
+      return c.json({ success: false, message: 'No Google Sheet database linked.' }, 400);
     }
 
-    const { itemName, category, minStockAlert } = req.body;
+    const body = await c.req.json().catch(() => ({}));
+    const { itemName, category, minStockAlert } = body;
 
     if (!itemName || !category) {
-      return res.status(400).json({
+      return c.json({
         success: false,
         message: 'Missing required inventory details (itemName, category).',
-      });
+      }, 400);
     }
 
     try {
-      const authClient = GoogleAuthService.getClientWithTokens(user.tokens);
+      const authClient = GoogleAuthService.getClientWithTokens(user.tokens, c);
       const sheets = google.sheets({ version: 'v4', auth: authClient });
 
       // 1. Fetch current row count of Inventory
@@ -148,7 +147,7 @@ export class InventoryController {
         requestBody: { values: [itemRow] },
       });
 
-      return res.status(201).json({
+      return c.json({
         success: true,
         message: 'Inventory material created successfully!',
         data: {
@@ -160,10 +159,10 @@ export class InventoryController {
           avgLandedCost: 0,
           minStockAlert: Number(minStockAlert || 10),
         },
-      });
+      }, 201);
     } catch (error: any) {
       console.error('[InventoryController] Creating inventory item failed:', error);
-      return res.status(500).json({ success: false, message: 'Failed to write material item to sheet.', error: error.message });
+      return c.json({ success: false, message: 'Failed to write material item to sheet.', error: error.message }, 500);
     }
   }
 }

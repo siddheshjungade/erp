@@ -2,11 +2,12 @@
   "name": "solar-erp-backend",
   "version": "1.0.0",
   "description": "Backend for Solar ERP MVP",
-  "main": "dist/server.js",
+  "main": "src/index.ts",
   "scripts": {
-    "dev": "ts-node-dev --respawn --transpile-only src/server.ts",
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy",
     "build": "tsc",
-    "start": "node dist/server.js"
+    "typecheck": "tsc --noEmit"
   },
   "dependencies": {
     "cookie-parser": "^1.4.7",
@@ -15,15 +16,18 @@
     "express": "^4.19.2",
     "google-auth-library": "^9.15.0",
     "googleapis": "^144.0.0",
+    "hono": "^4.13.5",
     "jsonwebtoken": "^9.0.2"
   },
   "devDependencies": {
+    "@cloudflare/workers-types": "^5.20260904.1",
     "@types/cookie-parser": "^1.4.8",
     "@types/cors": "^2.8.17",
     "@types/express": "^4.17.21",
     "@types/jsonwebtoken": "^9.0.7",
     "@types/node": "^20.12.12",
     "ts-node-dev": "^2.0.0",
-    "typescript": "^5.4.5"
+    "typescript": "^5.4.5",
+    "wrangler": "^4.129.0"
   }
 }

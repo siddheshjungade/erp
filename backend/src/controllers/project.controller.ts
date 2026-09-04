@@ -1,4 +1,4 @@
-import { Request, Response } from 'express';
+import { Context } from 'hono';
 import { ProjectService } from '../services/project.service';
 
 export class ProjectController {
@@ -6,25 +6,25 @@ export class ProjectController {
    * Endpoint: POST /api/projects
    * Registers a project.
    */
-  public static async createProject(req: Request, res: Response) {
-    if (!req.user) {
-      return res.status(401).json({ success: false, message: 'Unauthorized session.' });
+  public static async createProject(c: Context) {
+    const user = c.get('user');
+    if (!user) {
+      return c.json({ success: false, message: 'Unauthorized session.' }, 401);
     }
 
-    const user = req.user as any;
     const spreadsheetId = user.spreadsheetId;
-
     if (!spreadsheetId) {
-      return res.status(400).json({ success: false, message: 'No Google Sheet database linked.' });
+      return c.json({ success: false, message: 'No Google Sheet database linked.' }, 400);
     }
 
-    const { projectName, clientName, contractValue } = req.body;
+    const body = await c.req.json().catch(() => ({}));
+    const { projectName, clientName, contractValue } = body;
 
     if (!projectName || !clientName || !contractValue) {
-      return res.status(400).json({ 
+      return c.json({ 
         success: false, 
         message: 'Missing required project details (Project Name, Client Name, Contract Value).' 
-      });
+      }, 400);
     }
 
     try {
@@ -34,18 +34,18 @@ export class ProjectController {
         contractValue: Number(contractValue),
       });
 
-      return res.json({
+      return c.json({
         success: true,
         message: 'Project created successfully!',
         data: result,
       });
     } catch (error: any) {
       console.error('[ProjectController] Project creation failed:', error);
-      return res.status(500).json({ 
+      return c.json({ 
         success: false, 
         message: 'Failed to write project to Google Sheets.', 
         error: error.message 
-      });
+      }, 500);
     }
   }
 
@@ -53,24 +53,23 @@ export class ProjectController {
    * Endpoint: GET /api/projects
    * Lists all projects from the spreadsheet.
    */
-  public static async getProjects(req: Request, res: Response) {
-    if (!req.user) {
-      return res.status(401).json({ success: false, message: 'Unauthorized session.' });
+  public static async getProjects(c: Context) {
+    const user = c.get('user');
+    if (!user) {
+      return c.json({ success: false, message: 'Unauthorized session.' }, 401);
     }
 
-    const user = req.user as any;
     const spreadsheetId = user.spreadsheetId;
-
     if (!spreadsheetId) {
-      return res.status(400).json({ success: false, message: 'No Google Sheet database linked.' });
+      return c.json({ success: false, message: 'No Google Sheet database linked.' }, 400);
     }
 
     try {
       const projects = await ProjectService.listProjects(user.tokens, spreadsheetId);
-      return res.json({ success: true, data: projects });
+      return c.json({ success: true, data: projects });
     } catch (error: any) {
       console.error('[ProjectController] Fetching projects failed:', error);
-      return res.status(500).json({ success: false, message: 'Failed to read projects.', error: error.message });
+      return c.json({ success: false, message: 'Failed to read projects.', error: error.message }, 500);
     }
   }
 
@@ -78,24 +77,23 @@ export class ProjectController {
    * Endpoint: GET /api/projects/dispatches
    * Lists all material usage/outbound dispatch records.
    */
-  public static async getDispatches(req: Request, res: Response) {
-    if (!req.user) {
-      return res.status(401).json({ success: false, message: 'Unauthorized session.' });
+  public static async getDispatches(c: Context) {
+    const user = c.get('user');
+    if (!user) {
+      return c.json({ success: false, message: 'Unauthorized session.' }, 401);
     }
 
-    const user = req.user as any;
     const spreadsheetId = user.spreadsheetId;
-
     if (!spreadsheetId) {
-      return res.status(400).json({ success: false, message: 'No Google Sheet database linked.' });
+      return c.json({ success: false, message: 'No Google Sheet database linked.' }, 400);
     }
 
     try {
       const dispatches = await ProjectService.listDispatches(user.tokens, spreadsheetId);
-      return res.json({ success: true, data: dispatches });
+      return c.json({ success: true, data: dispatches });
     } catch (error: any) {
       console.error('[ProjectController] Fetching dispatches failed:', error);
-      return res.status(500).json({ success: false, message: 'Failed to read dispatches.', error: error.message });
+      return c.json({ success: false, message: 'Failed to read dispatches.', error: error.message }, 500);
     }
   }
 
@@ -103,33 +101,33 @@ export class ProjectController {
    * Endpoint: POST /api/projects/dispatch
    * Dynamic Stock Headroom check, landed cost calculation, and Material_Usage write.
    */
-  public static async dispatchMaterial(req: Request, res: Response) {
-    if (!req.user) {
-      return res.status(401).json({ success: false, message: 'Unauthorized session.' });
+  public static async dispatchMaterial(c: Context) {
+    const user = c.get('user');
+    if (!user) {
+      return c.json({ success: false, message: 'Unauthorized session.' }, 401);
     }
 
-    const user = req.user as any;
     const spreadsheetId = user.spreadsheetId;
-
     if (!spreadsheetId) {
-      return res.status(400).json({ success: false, message: 'No Google Sheet database linked.' });
+      return c.json({ success: false, message: 'No Google Sheet database linked.' }, 400);
     }
 
-    const { projectId, materialId, quantityUsed, dispatchDate } = req.body;
+    const body = await c.req.json().catch(() => ({}));
+    const { projectId, materialId, quantityUsed, dispatchDate } = body;
 
     if (!projectId || !materialId || quantityUsed === undefined || !dispatchDate) {
-      return res.status(400).json({ 
+      return c.json({ 
         success: false, 
         message: 'Missing dispatch variables (Project, Material, Quantity, Date).' 
-      });
+      }, 400);
     }
 
     const parsedQty = Number(quantityUsed);
     if (isNaN(parsedQty) || parsedQty <= 0) {
-      return res.status(400).json({
+      return c.json({
         success: false,
         message: 'Dispatch Quantity (Units) must be greater than 0.'
-      });
+      }, 400);
     }
 
     try {
@@ -140,7 +138,7 @@ export class ProjectController {
         dispatchDate,
       });
 
-      return res.json({
+      return c.json({
         success: true,
         message: 'Material dispatch recorded successfully!',
         data: result,
@@ -150,14 +148,14 @@ export class ProjectController {
       
       // Specialize bad request for headroom limit bounds
       if (error.message.includes('headroom exceeded') || error.message.includes('not found')) {
-        return res.status(400).json({ success: false, message: error.message });
+        return c.json({ success: false, message: error.message }, 400);
       }
 
-      return res.status(500).json({ 
+      return c.json({ 
         success: false, 
         message: 'Failed to write material usage to Google Sheets.', 
         error: error.message 
-      });
+      }, 500);
     }
   }
 
@@ -165,12 +163,61 @@ export class ProjectController {
    * Endpoint: POST /api/projects/allocate (Phase 4 Specification)
    * Adapter matching snake_case layout requirements.
    */
-  public static async allocateMaterial(req: Request, res: Response) {
-    req.body.projectId = req.body.project_id;
-    req.body.materialId = req.body.material_id;
-    req.body.quantityUsed = req.body.quantity_used;
-    req.body.dispatchDate = req.body.dispatch_date || new Date().toISOString().slice(0, 10);
-    
-    return ProjectController.dispatchMaterial(req, res);
+  public static async allocateMaterial(c: Context) {
+    const user = c.get('user');
+    if (!user) {
+      return c.json({ success: false, message: 'Unauthorized session.' }, 401);
+    }
+
+    const spreadsheetId = user.spreadsheetId;
+    if (!spreadsheetId) {
+      return c.json({ success: false, message: 'No Google Sheet database linked.' }, 400);
+    }
+
+    const body = await c.req.json().catch(() => ({}));
+    const projectId = body.project_id || body.projectId;
+    const materialId = body.material_id || body.materialId;
+    const quantityUsed = body.quantity_used || body.quantityUsed;
+    const dispatchDate = body.dispatch_date || body.dispatchDate || new Date().toISOString().slice(0, 10);
+
+    if (!projectId || !materialId || quantityUsed === undefined) {
+      return c.json({
+        success: false,
+        message: 'Missing dispatch variables (project_id, material_id, quantity_used).'
+      }, 400);
+    }
+
+    const parsedQty = Number(quantityUsed);
+    if (isNaN(parsedQty) || parsedQty <= 0) {
+      return c.json({
+        success: false,
+        message: 'Dispatch Quantity (Units) must be greater than 0.'
+      }, 400);
+    }
+
+    try {
+      const result = await ProjectService.dispatchMaterial(user.tokens, spreadsheetId, {
+        projectId,
+        materialId,
+        quantityUsed: parsedQty,
+        dispatchDate,
+      });
+
+      return c.json({
+        success: true,
+        message: 'Material dispatch recorded successfully!',
+        data: result,
+      });
+    } catch (error: any) {
+      console.error('[ProjectController] Material allocation failed:', error);
+      if (error.message.includes('headroom exceeded') || error.message.includes('not found')) {
+        return c.json({ success: false, message: error.message }, 400);
+      }
+      return c.json({ 
+        success: false, 
+        message: 'Failed to write material usage to Google Sheets.', 
+        error: error.message 
+      }, 500);
+    }
   }
 }

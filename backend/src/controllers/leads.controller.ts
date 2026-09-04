@@ -1,4 +1,4 @@
-import { Request, Response } from 'express';
+import { Context } from 'hono';
 import { google } from 'googleapis';
 import { GoogleAuthService } from '../services/googleAuth.service';
 
@@ -93,20 +93,19 @@ export class LeadsController {
    * Endpoint: GET /api/leads
    * Fetches the current active list of prospect leads.
    */
-  public static async getLeads(req: Request, res: Response) {
-    if (!req.user) {
-      return res.status(401).json({ success: false, message: 'Unauthorized session.' });
+  public static async getLeads(c: Context) {
+    const user = c.get('user');
+    if (!user) {
+      return c.json({ success: false, message: 'Unauthorized session.' }, 401);
     }
 
-    const user = req.user as any;
     const spreadsheetId = user.spreadsheetId;
-
     if (!spreadsheetId) {
-      return res.status(400).json({ success: false, message: 'No Google Sheet database linked.' });
+      return c.json({ success: false, message: 'No Google Sheet database linked.' }, 400);
     }
 
     try {
-      const authClient = GoogleAuthService.getClientWithTokens(user.tokens);
+      const authClient = GoogleAuthService.getClientWithTokens(user.tokens, c);
       const sheets = google.sheets({ version: 'v4', auth: authClient });
 
       // Dynamically verify and initialize the sheet if needed
@@ -119,7 +118,7 @@ export class LeadsController {
 
       const rows = response.data.values || [];
       if (rows.length <= 1) {
-        return res.json({ success: true, data: [] });
+        return c.json({ success: true, data: [] });
       }
 
       const leads = rows.slice(1).map((row) => ({
@@ -133,10 +132,10 @@ export class LeadsController {
         createdAt: row[7],
       }));
 
-      return res.json({ success: true, data: leads });
+      return c.json({ success: true, data: leads });
     } catch (error: any) {
       console.error('[LeadsController] Fetching leads failed:', error);
-      return res.status(500).json({ success: false, message: 'Failed to read leads.', error: error.message });
+      return c.json({ success: false, message: 'Failed to read leads.', error: error.message }, 500);
     }
   }
 
@@ -144,29 +143,29 @@ export class LeadsController {
    * Endpoint: POST /api/leads
    * Appends a new prospect lead to the Leads sheet.
    */
-  public static async createLead(req: Request, res: Response) {
-    if (!req.user) {
-      return res.status(401).json({ success: false, message: 'Unauthorized session.' });
+  public static async createLead(c: Context) {
+    const user = c.get('user');
+    if (!user) {
+      return c.json({ success: false, message: 'Unauthorized session.' }, 401);
     }
 
-    const user = req.user as any;
     const spreadsheetId = user.spreadsheetId;
-
     if (!spreadsheetId) {
-      return res.status(400).json({ success: false, message: 'No Google Sheet database linked.' });
+      return c.json({ success: false, message: 'No Google Sheet database linked.' }, 400);
     }
 
-    const { clientName, phone, email, address, status, notes } = req.body;
+    const body = await c.req.json().catch(() => ({}));
+    const { clientName, phone, email, address, status, notes } = body;
 
     if (!clientName || !phone || !email || !address || !status) {
-      return res.status(400).json({
+      return c.json({
         success: false,
         message: 'Missing required lead details (clientName, phone, email, address, status).',
-      });
+      }, 400);
     }
 
     try {
-      const authClient = GoogleAuthService.getClientWithTokens(user.tokens);
+      const authClient = GoogleAuthService.getClientWithTokens(user.tokens, c);
       const sheets = google.sheets({ version: 'v4', auth: authClient });
 
       // Dynamically verify and initialize the sheet if needed
@@ -203,7 +202,7 @@ export class LeadsController {
         requestBody: { values: [leadRow] },
       });
 
-      return res.status(201).json({
+      return c.json({
         success: true,
         message: 'Prospect lead created successfully!',
         data: {
@@ -216,10 +215,10 @@ export class LeadsController {
           notes,
           createdAt,
         },
-      });
+      }, 201);
     } catch (error: any) {
       console.error('[LeadsController] Creating lead failed:', error);
-      return res.status(500).json({ success: false, message: 'Failed to write lead to sheet.', error: error.message });
+      return c.json({ success: false, message: 'Failed to write lead to sheet.', error: error.message }, 500);
     }
   }
 }
